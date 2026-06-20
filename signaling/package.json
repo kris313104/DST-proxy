@@ -1,0 +1,14 @@
+{
+  "name": "dst-proximity-signaling",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Signaling server for DST proximity voice (Phase 2 MVP): room-based WebRTC mesh relay.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_signaling.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

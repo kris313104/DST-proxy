@@ -1,0 +1,18 @@
+# Render.com Blueprint — deploys the signaling server and gives you a wss:// URL.
+# In Render: New -> Blueprint -> pick this repo. Render sets PORT automatically.
+services:
+  - type: web
+    name: dst-proximity-signaling
+    runtime: node
+    plan: free
+    rootDir: signaling
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: STUN_URL
+        value: stun:stun.l.google.com:19302
+      # - key: TURN_URL          # set if you run coturn on a VPS
+      #   value: turn:user:pass@your-vps:3478?transport=udp
+      # - key: JOIN_SECRET       # optional; clients then need --token <secret>
+      #   sync: false

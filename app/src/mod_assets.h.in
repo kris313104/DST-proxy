@@ -1,0 +1,13 @@
+// Generated from the mod/ source files by CMake (configure_file). DO NOT EDIT.
+// Lets the companion app carry the mod inside the .exe and auto-install it.
+#pragma once
+
+namespace prox {
+
+inline const char* const MODINFO_LUA = R"PROXLUA(@MOD_MODINFO@)PROXLUA";
+
+inline const char* const MODMAIN_LUA = R"PROXLUA(@MOD_MODMAIN@)PROXLUA";
+
+inline const char* const EXPORT_LUA = R"PROXLUA(@MOD_EXPORT@)PROXLUA";
+
+}  // namespace prox

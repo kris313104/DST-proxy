@@ -1,0 +1,21 @@
+# Build
+app/build/
+app/build-msvc/
+build/
+out/
+*.log
+app/vcpkg_install.log
+
+# Node
+node_modules/
+*.obj
+*.o
+*.a
+*.lib
+*.exe
+*.pdb
+
+# Editors
+.vscode/
+.idea/
+*.swp

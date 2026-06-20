@@ -1,0 +1,30 @@
+# Example deployment topology for DST proximity voice (Phase 4).
+# Audio is P2P (WebRTC) and never flows through these services — only signaling + TURN relay.
+version: "3.8"
+
+services:
+  signaling:
+    build: ../signaling
+    # or: image: node:22-alpine, command: node server.js, volume-mount ../signaling
+    environment:
+      PORT: "8080"
+      STUN_URL: "stun:stun.l.google.com:19302"
+      # Point clients at your TURN server (static creds matching coturn Option A):
+      TURN_URL: "turn:proxyuser:CHANGE_ME_PASSWORD@YOUR.HOST:3478?transport=udp"
+      # JOIN_SECRET: "optional-shared-secret"   # clients pass --token <secret>
+      MAX_PER_IP: "50"
+      MAX_ROOM: "16"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host          # TURN needs the host network for the relay port range
+    volumes:
+      - ./coturn.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    restart: unless-stopped
+
+# Scaling beyond one signaling node (see DEPLOY.md): run N stateless `signaling` replicas
+# behind a load balancer (sticky-by-room or a Redis pub/sub adapter), plus a coturn cluster.

@@ -1,0 +1,9 @@
+// Generated from app/resources/cacert.pem by CMake (configure_file). DO NOT EDIT.
+// Mozilla CA bundle embedded so wss:// signaling can be TLS-verified on any machine.
+#pragma once
+
+namespace prox {
+
+inline const char* const CA_BUNDLE_PEM = R"PROXCA(@CA_PEM@)PROXCA";
+
+}  // namespace prox
