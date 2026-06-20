@@ -37,7 +37,7 @@ namespace {
 
 // >>> Hosted signaling server. Replace with your public server for zero-config end users,
 //     e.g. "wss://prox.zenx.today". Overridable via PROX_SIGNAL env or --signal.
-const char* kDefaultSignaling = "ws://127.0.0.1:8080";
+const char* kDefaultSignaling = "wss://dst-proximity-signaling.onrender.com";
 
 std::string argval(int argc, char** argv, const char* key, const std::string& def) {
     for (int i = 1; i < argc - 1; ++i)
