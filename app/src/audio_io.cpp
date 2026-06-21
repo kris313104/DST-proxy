@@ -13,10 +13,20 @@ struct AudioIOImpl {
     AudioIO::FrameCallback on_frame;
     AudioIO::RenderCallback on_render;
 
+    ma_context context{};
+    bool contextOk = false;
     ma_device capture{};
     ma_device playback{};
     bool capture_ok = false;
     bool playback_ok = false;
+
+    int captureIndex = -1;       // -1 = default device
+    ma_device_id captureId{};
+    bool haveCaptureId = false;
+
+    int playbackIndex = -1;      // -1 = default device
+    ma_device_id playbackId{};
+    bool havePlaybackId = false;
 
     std::vector<int16_t> accum;  // accumulates mic samples up to capture_frame
     int accum_n = 0;
@@ -53,24 +63,83 @@ AudioIO::~AudioIO() { stop(); }
 
 void AudioIO::set_on_frame(FrameCallback cb) { impl_->on_frame = std::move(cb); }
 void AudioIO::set_on_render(RenderCallback cb) { impl_->on_render = std::move(cb); }
+void AudioIO::set_capture_device(int index) { impl_->captureIndex = index; }
+void AudioIO::set_playback_device(int index) { impl_->playbackIndex = index; }
+
+namespace {
+// Enumerate device names for one direction (playback=false -> capture).
+std::vector<std::string> list_devices(bool playback) {
+    std::vector<std::string> names;
+    ma_context ctx;
+    if (ma_context_init(nullptr, 0, nullptr, &ctx) != MA_SUCCESS) return names;
+    ma_device_info* play = nullptr;
+    ma_uint32 nplay = 0;
+    ma_device_info* cap = nullptr;
+    ma_uint32 ncap = 0;
+    if (ma_context_get_devices(&ctx, &play, &nplay, &cap, &ncap) == MA_SUCCESS) {
+        if (playback)
+            for (ma_uint32 i = 0; i < nplay; ++i) names.emplace_back(play[i].name);
+        else
+            for (ma_uint32 i = 0; i < ncap; ++i) names.emplace_back(cap[i].name);
+    }
+    ma_context_uninit(&ctx);
+    return names;
+}
+}  // namespace
+
+std::vector<std::string> AudioIO::list_capture_devices() { return list_devices(false); }
+std::vector<std::string> AudioIO::list_playback_devices() { return list_devices(true); }
 int AudioIO::sample_rate() const { return impl_->sample_rate; }
 int AudioIO::capture_frame() const { return impl_->capture_frame; }
 bool AudioIO::capture_running() const { return impl_->capture_ok; }
 bool AudioIO::playback_running() const { return impl_->playback_ok; }
 
 bool AudioIO::start() {
+    ma_context* ctx = nullptr;
+    if (ma_context_init(nullptr, 0, nullptr, &impl_->context) == MA_SUCCESS) {
+        impl_->contextOk = true;
+        ctx = &impl_->context;
+    }
+
+    // Resolve the chosen capture device by index (if any). Reset first so a switch back to
+    // the default device (index < 0) doesn't keep reusing a previously resolved device id.
+    impl_->haveCaptureId = false;
+    if (impl_->contextOk && impl_->captureIndex >= 0) {
+        ma_device_info* play = nullptr;
+        ma_uint32 nplay = 0;
+        ma_device_info* cap = nullptr;
+        ma_uint32 ncap = 0;
+        if (ma_context_get_devices(&impl_->context, &play, &nplay, &cap, &ncap) == MA_SUCCESS &&
+            static_cast<ma_uint32>(impl_->captureIndex) < ncap) {
+            impl_->captureId = cap[impl_->captureIndex].id;
+            impl_->haveCaptureId = true;
+        }
+    }
+
+    // Resolve the chosen playback device by index (symmetric to capture).
+    impl_->havePlaybackId = false;
+    if (impl_->contextOk && impl_->playbackIndex >= 0) {
+        ma_device_info* play = nullptr;
+        ma_uint32 nplay = 0;
+        ma_device_info* cap = nullptr;
+        ma_uint32 ncap = 0;
+        if (ma_context_get_devices(&impl_->context, &play, &nplay, &cap, &ncap) == MA_SUCCESS &&
+            static_cast<ma_uint32>(impl_->playbackIndex) < nplay) {
+            impl_->playbackId = play[impl_->playbackIndex].id;
+            impl_->havePlaybackId = true;
+        }
+    }
+
     ma_device_config cc = ma_device_config_init(ma_device_type_capture);
     cc.capture.format = ma_format_s16;
     cc.capture.channels = 1;
     cc.sampleRate = static_cast<ma_uint32>(impl_->sample_rate);
     cc.dataCallback = capture_cb;
     cc.pUserData = impl_.get();
-    if (ma_device_init(nullptr, &cc, &impl_->capture) == MA_SUCCESS) {
-        if (ma_device_start(&impl_->capture) == MA_SUCCESS) {
-            impl_->capture_ok = true;
-        } else {
-            ma_device_uninit(&impl_->capture);
-        }
+    if (impl_->haveCaptureId) cc.capture.pDeviceID = &impl_->captureId;
+    if (ma_device_init(ctx, &cc, &impl_->capture) == MA_SUCCESS) {
+        if (ma_device_start(&impl_->capture) == MA_SUCCESS) impl_->capture_ok = true;
+        else ma_device_uninit(&impl_->capture);
     }
 
     ma_device_config pc = ma_device_config_init(ma_device_type_playback);
@@ -79,12 +148,10 @@ bool AudioIO::start() {
     pc.sampleRate = static_cast<ma_uint32>(impl_->sample_rate);
     pc.dataCallback = playback_cb;
     pc.pUserData = impl_.get();
-    if (ma_device_init(nullptr, &pc, &impl_->playback) == MA_SUCCESS) {
-        if (ma_device_start(&impl_->playback) == MA_SUCCESS) {
-            impl_->playback_ok = true;
-        } else {
-            ma_device_uninit(&impl_->playback);
-        }
+    if (impl_->havePlaybackId) pc.playback.pDeviceID = &impl_->playbackId;
+    if (ma_device_init(ctx, &pc, &impl_->playback) == MA_SUCCESS) {
+        if (ma_device_start(&impl_->playback) == MA_SUCCESS) impl_->playback_ok = true;
+        else ma_device_uninit(&impl_->playback);
     }
 
     return impl_->capture_ok || impl_->playback_ok;
@@ -99,6 +166,10 @@ void AudioIO::stop() {
     if (impl_->playback_ok) {
         ma_device_uninit(&impl_->playback);
         impl_->playback_ok = false;
+    }
+    if (impl_->contextOk) {
+        ma_context_uninit(&impl_->context);
+        impl_->contextOk = false;
     }
 }
 

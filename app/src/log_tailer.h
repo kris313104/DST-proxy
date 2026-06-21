@@ -20,7 +20,9 @@ std::optional<std::filesystem::path> find_client_log();
 // Obsługuje obcięcie/rotację pliku (restart gry) — resetuje pozycję, gdy plik się skurczy.
 class LogTailer {
 public:
-    explicit LogTailer(std::filesystem::path path);
+    // from_end=true: skip everything already in the file (only tail new appends). This avoids
+    // replaying stale [PROX] lines from a previous session.
+    explicit LogTailer(std::filesystem::path path, bool from_end = false);
 
     std::vector<std::string> poll();
 
@@ -30,6 +32,8 @@ private:
     std::filesystem::path path_;
     std::uintmax_t offset_ = 0;  // ile bajtów już skonsumowano
     std::string partial_;        // niedokończona ostatnia linia
+    bool from_end_ = false;
+    bool primed_ = false;        // czy ustawiono początkowy offset
 };
 
 }  // namespace prox

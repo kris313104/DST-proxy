@@ -35,6 +35,15 @@ local PERIOD = 1 / update_hz
 local DEBUG_IDS = cfg("debug_ids", true) and true or false
 local DIAG_PERIOD = 5.0 -- seconds between ID-candidate diagnostics
 
+-- In-game mute: a hotkey toggles a [PROX-CMD] mute line that the companion app honors,
+-- so the player can mute/unmute their mic without alt-tabbing out of the game.
+local mute_key_name = cfg("mute_key", "N")
+local SHOW_INDICATOR = cfg("mute_indicator", true) and true or false
+local MUTE_KEY_CODE = nil
+if type(mute_key_name) == "string" and mute_key_name ~= "" then
+  MUTE_KEY_CODE = G["KEY_" .. string.upper(mute_key_name)]
+end
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
@@ -67,6 +76,64 @@ end
 local function in_gameplay()
   return safe(function() return G.InGamePlay() end, true) and true or false
 end
+
+-- ---------------------------------------------------------------------------
+-- In-game mute (hotkey -> [PROX-CMD] line -> companion app mutes the mic)
+-- ---------------------------------------------------------------------------
+local muted = false
+local indicator = nil  -- on-screen "MIC MUTED" Text widget (best-effort)
+
+-- Emitting the command is the functional core: it MUST be simple and never fail.
+local function emit_mute()
+  print(string.format("[PROX-CMD] v=%d mute=%d", PROTO_VERSION, muted and 1 or 0))
+end
+
+-- Visual feedback only; entirely best-effort (any failure is swallowed).
+local function update_indicator()
+  if not SHOW_INDICATOR then return end
+  pcall(function()
+    local player = G.ThePlayer
+    if player == nil or player.HUD == nil then return end
+    if indicator == nil then
+      local Text = G.require("widgets/text")
+      indicator = player.HUD:AddChild(Text(G.DEFAULTFONT, 40))
+      indicator:SetPosition(0, 250)
+      indicator:SetColour(1, 0.35, 0.35, 1)
+    end
+    if muted then
+      indicator:SetString("MIC MUTED")
+      indicator:Show()
+    else
+      indicator:Hide()
+    end
+  end)
+end
+
+-- True if a chat/console text box is open, so the mute key isn't swallowed while typing.
+local function text_input_open()
+  local ok, res = pcall(function()
+    local hud = G.ThePlayer and G.ThePlayer.HUD
+    return hud ~= nil and hud.IsChatInputScreenOpen and hud:IsChatInputScreenOpen()
+  end)
+  return ok and res == true
+end
+
+local function toggle_mute()
+  if not in_gameplay() then return end
+  if text_input_open() then return end
+  muted = not muted
+  emit_mute()
+  update_indicator()
+end
+
+-- Register the key handler exactly once (TheInput is global and survives world reloads).
+local key_handler_installed = false
+local function install_input()
+  if key_handler_installed or MUTE_KEY_CODE == nil then return end
+  local ok = pcall(function() G.TheInput:AddKeyDownHandler(MUTE_KEY_CODE, toggle_mute) end)
+  if ok then key_handler_installed = true end
+end
+install_input()  -- try early; retried on world load in case TheInput wasn't ready yet
 
 -- ---------------------------------------------------------------------------
 -- Position export (per tick)
@@ -116,6 +183,10 @@ end
 local announced = false
 local function start_export()
   if G.TheWorld == nil then return end
+
+  install_input()      -- ensure the mute hotkey is bound (no-op if already done)
+  indicator = nil      -- the HUD was recreated on this world load; rebuild lazily
+  pcall(update_indicator)
 
   G.TheWorld:DoPeriodicTask(PERIOD, export_tick)
   if DEBUG_IDS then

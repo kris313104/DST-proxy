@@ -36,6 +36,8 @@ struct VoiceConfig {
     bool denoise = true;             // speexdsp noise suppression on the mic
     bool agc = true;                 // speexdsp automatic gain control
     double pan_amount = 1.0;         // directional panning strength; 0 = off, negative = invert (calibration)
+    double pan_offset = 0.0;         // degrees added to camera heading (calibrate left/right vs screen)
+    double mic_gain = 1.0;           // microphone input gain multiplier
 };
 
 class VoiceClient {
@@ -51,6 +53,11 @@ public:
 
     // Push-to-talk gate: when false, mic audio is not transmitted. Thread-safe.
     void setTransmitting(bool on);
+
+    // Live, thread-safe tuning (for the GUI sliders). Safe to call while audio runs.
+    void setMicGain(double g);         // microphone input gain multiplier
+    void setFar(double far_r);         // hearing range: distance at which volume reaches 0
+    void setPanOffset(double deg);     // degrees added to camera heading (left/right calibration)
 
     // Wire to AudioIO: call from on_frame (mic) and on_render (speakers).
     void onCaptureFrame(const int16_t* mono, int frames);
@@ -88,6 +95,11 @@ private:
 
     std::mutex iceMtx_;
     std::vector<std::string> iceServers_;  // effective ICE servers (may be set by the server)
+
+    // Runtime-tunable params (GUI sliders); read on the audio threads, written from the UI.
+    std::atomic<double> micGain_{1.0};
+    std::atomic<double> farR_{30.0};
+    std::atomic<double> panOffset_{0.0};
 
     int posSendCounter_ = 0;
     std::atomic<bool> txEnabled_{true};

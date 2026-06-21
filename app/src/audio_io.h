@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace prox {
 
@@ -25,6 +27,15 @@ public:
 
     void set_on_frame(FrameCallback cb);    // called per capture_frame of mic audio
     void set_on_render(RenderCallback cb);  // called to fill the playback buffer
+
+    // Choose the capture (microphone) device by index (see list_capture_devices). Call before start().
+    void set_capture_device(int index);
+    // Choose the playback (speakers) device by index (see list_playback_devices). Call before start().
+    void set_playback_device(int index);
+
+    // Names of available devices, index-aligned with set_capture_device / set_playback_device.
+    static std::vector<std::string> list_capture_devices();
+    static std::vector<std::string> list_playback_devices();
 
     bool start();  // false if no usable device started
     void stop();

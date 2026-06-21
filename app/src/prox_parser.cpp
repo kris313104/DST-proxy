@@ -127,4 +127,14 @@ LineKind parse_line(const std::string& line, Update& out_update, Ids& out_ids) {
     return LineKind::None;
 }
 
+bool parse_command(const std::string& line, Command& out) {
+    const std::string marker = "[PROX-CMD]";
+    size_t p = line.find(marker);
+    if (p == std::string::npos) return false;
+    auto kv = parse_kv(line.substr(p + marker.size()));
+    out.version = to_int(kv, "v", 0);
+    out.mute = to_int(kv, "mute", -1);
+    return true;
+}
+
 }  // namespace prox

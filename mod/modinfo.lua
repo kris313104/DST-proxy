@@ -39,6 +39,31 @@ configuration_options = {
     default = 10,
   },
   {
+    name = "mute_key",
+    label = "In-game mute key",
+    hover = "Press this key while playing to mute/unmute your microphone (no need to alt-tab).",
+    options = {
+      { description = "N", data = "N" },
+      { description = "M", data = "M" },
+      { description = "V", data = "V" },
+      { description = "B", data = "B" },
+      { description = "K", data = "K" },
+      { description = "J", data = "J" },
+      { description = "Off", data = "" },
+    },
+    default = "N",
+  },
+  {
+    name = "mute_indicator",
+    label = "Show mute indicator",
+    hover = "Show a red MIC MUTED text on screen while your microphone is muted.",
+    options = {
+      { description = "On", data = true },
+      { description = "Off", data = false },
+    },
+    default = true,
+  },
+  {
     name = "debug_ids",
     label = "Session ID diagnostics",
     hover = "Print candidate room identifiers (for the 2-client test). Turn off once chosen.",

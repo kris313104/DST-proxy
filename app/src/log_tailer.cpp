@@ -48,7 +48,8 @@ std::optional<fs::path> find_client_log() {
     return best;
 }
 
-LogTailer::LogTailer(fs::path path) : path_(std::move(path)) {}
+LogTailer::LogTailer(fs::path path, bool from_end)
+    : path_(std::move(path)), from_end_(from_end) {}
 
 std::vector<std::string> LogTailer::poll() {
     std::vector<std::string> lines;
@@ -56,6 +57,14 @@ std::vector<std::string> LogTailer::poll() {
     std::error_code ec;
     std::uintmax_t size = fs::file_size(path_, ec);
     if (ec) return lines;  // plik chwilowo niedostępny
+
+    if (!primed_) {
+        primed_ = true;
+        if (from_end_) {
+            offset_ = size;  // pomiń istniejącą zawartość (stare sesje)
+            return lines;
+        }
+    }
 
     if (size < offset_) {
         // Plik się skurczył (rotacja/restart) — zacznij od początku.

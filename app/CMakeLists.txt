@@ -82,9 +82,14 @@ if(PROX_WITH_VOICE)
         target_link_libraries(prox_net PUBLIC advapi32)
     endif()
 
-    # The proximity voice app.
-    add_executable(prox_voice src/main_voice.cpp)
-    target_link_libraries(prox_voice PRIVATE prox_net)
+    # The proximity voice app. On Windows it includes a native Win32 GUI (default mode).
+    if(WIN32)
+        add_executable(prox_voice src/main_voice.cpp src/gui_win.cpp)
+        target_link_libraries(prox_voice PRIVATE prox_net comctl32)
+    else()
+        add_executable(prox_voice src/main_voice.cpp)
+        target_link_libraries(prox_voice PRIVATE prox_net)
+    endif()
 
     # Ship the CA bundle next to the exe (used to TLS-verify wss:// signaling).
     add_custom_command(TARGET prox_voice POST_BUILD

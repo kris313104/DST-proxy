@@ -34,7 +34,11 @@ struct VoiceClient::Peer {
     std::atomic<bool> dcOpen{false};
 };
 
-VoiceClient::VoiceClient(VoiceConfig cfg) : cfg_(std::move(cfg)) {}
+VoiceClient::VoiceClient(VoiceConfig cfg) : cfg_(std::move(cfg)) {
+    micGain_.store(cfg_.mic_gain);
+    farR_.store(cfg_.falloff.far_r);
+    panOffset_.store(cfg_.pan_offset);
+}
 VoiceClient::~VoiceClient() { stop(); }
 
 void VoiceClient::start(const std::string& room, const std::string& uid, const std::string& name) {
@@ -84,6 +88,9 @@ void VoiceClient::setLocalPosition(const Update& u) {
 }
 
 void VoiceClient::setTransmitting(bool on) { txEnabled_.store(on); }
+void VoiceClient::setMicGain(double g) { micGain_.store(g); }
+void VoiceClient::setFar(double far_r) { farR_.store(far_r); }
+void VoiceClient::setPanOffset(double deg) { panOffset_.store(deg); }
 
 namespace {
 double frame_rms(const int16_t* x, int n) {
@@ -219,6 +226,17 @@ void VoiceClient::onCaptureFrame(const int16_t* mono, int frames) {
         preproc_->process(procbuf_.data());
         src = procbuf_.data();
     }
+    const double micGain = micGain_.load();
+    if (micGain != 1.0) {
+        if (src != procbuf_.data()) {
+            procbuf_.assign(mono, mono + frames);
+            src = procbuf_.data();
+        }
+        for (int i = 0; i < frames; ++i) {
+            long v = std::lround(procbuf_[i] * micGain);
+            procbuf_[i] = static_cast<int16_t>(std::clamp<long>(v, -32768, 32767));
+        }
+    }
 
     bool tx = txEnabled_.load();
     if (tx && cfg_.gate_rms > 0.0 && frame_rms(src, frames) < cfg_.gate_rms) tx = false;
@@ -242,7 +260,7 @@ void VoiceClient::onCaptureFrame(const int16_t* mono, int frames) {
                 if (hasPos) {
                     const double dx = pp.x - lp.x;
                     const double dz = pp.z - lp.z;
-                    inRange = std::sqrt(dx * dx + dz * dz) <= cfg_.falloff.far_r * 1.1;
+                    inRange = std::sqrt(dx * dx + dz * dz) <= farR_.load() * 1.1;
                 }
             }
             targets.push_back({p->dc, inRange});
@@ -293,8 +311,10 @@ void VoiceClient::render(float* stereo, int frames) {
         }
         const double dx = pp.x - lp.x;
         const double dz = pp.z - lp.z;
-        const double gain = hasPos ? gain_for_delta(dx, dz, cfg_.falloff) : 1.0;
-        double pan = hasPos ? stereo_pan(dx, dz, lp.heading) : 0.0;
+        FalloffConfig fc = cfg_.falloff;
+        fc.far_r = farR_.load();
+        const double gain = hasPos ? gain_for_delta(dx, dz, fc) : 1.0;
+        double pan = hasPos ? stereo_pan(dx, dz, lp.heading + panOffset_.load()) : 0.0;
         pan = std::clamp(pan * cfg_.pan_amount, -1.0, 1.0);
 
         {
